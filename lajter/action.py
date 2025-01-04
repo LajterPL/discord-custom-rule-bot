@@ -36,6 +36,7 @@ class ActionType(Enum):
     BAN = "ban"
     GIVE_ROLE = "give role"
     REMOVE_ROLE = "remove role"
+    CHANGE_NAME = "change name"
 
 class Action:
     db = TinyDB("actions.json")
@@ -106,6 +107,11 @@ class Action:
                 s += "Zbanuj użytkownika"
                 if self.target:
                     s += f' {self.target[0]}'
+            case ActionType.CHANGE_NAME:
+                s += "Zmień nazwę użytkownika"
+                if self.target:
+                    s += f' {self.target[0]}'
+                s += f' na {self.value[0]}'
         return s
     async def execute(
             self,
@@ -179,4 +185,13 @@ class Action:
                     await target.ban(delete_message_seconds=0)
                 except Exception:
                     logger.warning(f'Failed to ban an user: {traceback.format_exc()}')
+            case ActionType.CHANGE_NAME:
+                try:
+                    target = user
+                    if self.target:
+                        target = await member_from_mention(user.guild, self.target[0])
+                    await target.edit(nick=self.value[0])
+                except Exception:
+                    logger.warning(f'Failed to change name: {traceback.format_exc()}')
+
 
