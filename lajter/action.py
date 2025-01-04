@@ -1,12 +1,14 @@
 import traceback
 from datetime import timedelta
 
-from discord.utils import get
+from discord import Member, TextChannel, Message
+from discord.ext import commands
 from tinydb import TinyDB, where
 import discord
 import logging
 from enum import Enum
 
+import lajter.user
 from lajter.utils import role_from_mention, member_from_mention
 
 logger = logging.getLogger('ACTION')
@@ -37,6 +39,7 @@ class ActionType(Enum):
     GIVE_ROLE = "give role"
     REMOVE_ROLE = "remove role"
     CHANGE_NAME = "change name"
+    ADD_POINTS = "add points"
 
 class Action:
     db = TinyDB("actions.json")
@@ -112,23 +115,28 @@ class Action:
                 if self.target:
                     s += f' {self.target[0]}'
                 s += f' na {self.value[0]}'
+            case ActionType.ADD_POINTS:
+                s += f'Dodaj {self.value[0]} punktów'
+                if self.target:
+                    s += f' użytkownikowi {self.target[0]}'
         return s
     async def execute(
             self,
-            client: discord.Client,
-            user: discord.Member = None,
-            channel: discord.TextChannel = None,
-            message: discord.Message = None
+            bot: commands.Bot = None,
+            member: Member = None,
+            db_user: lajter.user.User = None,
+            channel: TextChannel = None,
+            message: Message = None,
     ):
         match self.action_type:
             case ActionType.SEND_MESSAGE:
                 try:
                     if self.target:
                         for target in self.target:
-                            target_channel = await client.fetch_channel(target)
-                            await target_channel.send(self.value)
+                            target_channel = await bot.fetch_channel(target)
+                            await target_channel.send(self.value[0])
                     if channel is not None:
-                        await channel.send(self.value)
+                        await channel.send(self.value[0])
                 except Exception:
                     logger.warning(f'Failed to send a message: {traceback.format_exc()}')
             case ActionType.DELETE_MESSAGE:
@@ -143,55 +151,65 @@ class Action:
             case ActionType.GIVE_ROLE:
                 if self.value:
                     try:
-                        role = role_from_mention(user.guild, self.value[0])
-                        target = user
+                        role = role_from_mention(member.guild, self.value[0])
+                        target = member
                         if self.target:
-                            target = await member_from_mention(user.guild, self.target[0])
+                            target = await member_from_mention(member.guild, self.target[0])
                         await target.add_roles(role)
                     except Exception:
                         logger.warning(f'Failed to add a role: {traceback.format_exc()}')
             case ActionType.REMOVE_ROLE:
                 if self.value:
                     try:
-                        role = role_from_mention(user.guild, self.value[0])
-                        target = user
+                        role = role_from_mention(member.guild, self.value[0])
+                        target = member
                         if self.target:
-                            target = await member_from_mention(user.guild, self.target[0])
+                            target = await member_from_mention(member.guild, self.target[0])
                         await target.remove_roles(role)
                     except Exception:
                         logger.warning(f'Failed to remove a role: {traceback.format_exc()}')
             case ActionType.TIMEOUT:
                 if self.value:
                     try:
-                        target = user
+                        target = member
                         if self.target:
-                            target = await member_from_mention(user.guild, self.target[0])
+                            target = await member_from_mention(member.guild, self.target[0])
                         await target.timeout(timedelta(seconds=float(self.value[0])))
                     except Exception:
                         logger.warning(f'Failed to timeout an user: {traceback.format_exc()}')
             case ActionType.KICK:
                 try:
-                    target = user
+                    target = member
                     if self.target:
-                        target = await member_from_mention(user.guild, self.target[0])
+                        target = await member_from_mention(member.guild, self.target[0])
                     await target.kick()
                 except Exception:
                     logger.warning(f'Failed to kick an user: {traceback.format_exc()}')
             case ActionType.BAN:
                 try:
-                    target = user
+                    target = member
                     if self.target:
-                        target = await member_from_mention(user.guild, self.target[0])
+                        target = await member_from_mention(member.guild, self.target[0])
                     await target.ban(delete_message_seconds=0)
                 except Exception:
                     logger.warning(f'Failed to ban an user: {traceback.format_exc()}')
             case ActionType.CHANGE_NAME:
                 try:
-                    target = user
+                    target = member
                     if self.target:
-                        target = await member_from_mention(user.guild, self.target[0])
+                        target = await member_from_mention(member.guild, self.target[0])
                     await target.edit(nick=self.value[0])
                 except Exception:
                     logger.warning(f'Failed to change name: {traceback.format_exc()}')
+            case ActionType.ADD_POINTS:
+                try:
+                    target = db_user
+                    if self.target:
+                        target = await member_from_mention(member.guild, self.target[0])
+                        target = lajter.user.get_by_id(target.id)
 
-
+                    target.points += int(self.value[0])
+                    target.save()
+                except Exception:
+                    logger.warning(
+                        f'Failed to change name: {traceback.format_exc()}')

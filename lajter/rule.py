@@ -4,103 +4,22 @@ from enum import Enum
 from typing import List
 
 import discord
-from discord import Member, Spotify, Reaction
+from discord import Member, Spotify, Reaction, TextChannel, Message
 from discord.ext import commands
 from tinydb import TinyDB, where
 import lajter.action
 from lajter.action import Action
-
+import lajter.user
 
 logger = logging.getLogger('RULE')
 logger.setLevel(logging.DEBUG)
-
-async def handle_message_rules(bot: commands.Bot, message: discord.Message):
-    # Look for message rules that have matched with a regex
-    results = Rule.db.search(where('type') == RuleType.MESSAGE.value)
-    broken_rules = []
-    for res in results:
-        for regex in res['regexes']:
-            if re.search(regex, message.content):
-                broken_rules.append(res['id'])
-                break
-
-    if len(broken_rules) > 0:
-        logger.info(
-            f'Message from {message.author} triggered some rules: {message.content}')
-
-    # Execute all actions related to matched rules
-    for rule_id in broken_rules:
-        rule = get_by_id(rule_id)
-        await rule.execute(bot, message.author, message.channel, message)
-
-async def handle_activity_rules(bot: commands.Bot, member: Member):
-    # Look for message rules that have matched with a regex
-    results = Rule.db.search(where('type') == RuleType.ACTIVITY.value)
-    broken_rules = []
-    for res in results:
-        for regex in res['regexes']:
-            for activity in member.activities:
-                if type(activity) is Spotify:
-                    if re.search(regex, activity.title) or re.search(regex, activity.artist):
-                        broken_rules.append(res['id'])
-                        break
-                else:
-                    if re.search(regex, activity.name):
-                        broken_rules.append(res['id'])
-                        break
-
-    if len(broken_rules) > 0:
-        logger.info(
-            f'Activity from {member} triggered some rules: {member.activities}')
-
-    # Execute all actions related to matched rules
-    for rule_id in broken_rules:
-        rule = get_by_id(rule_id)
-        await rule.execute(bot, member)
-
-async def handle_reaction_rules(bot: commands.Bot, member: Member, reaction: Reaction):
-    # Look for message rules that have matched with a regex
-    results = Rule.db.search(where('type') == RuleType.REACTION.value)
-    broken_rules = []
-    for res in results:
-        for regex in res['regexes']:
-            if reaction.emoji == regex:
-                broken_rules.append(res['id'])
-                break
-
-    if len(broken_rules) > 0:
-        logger.info(
-            f'Reaction from {member} triggered some rules: {reaction}')
-
-    # Execute all actions related to matched rules
-    for rule_id in broken_rules:
-        rule = get_by_id(rule_id)
-        await rule.execute(bot, member, reaction.message.channel, reaction.message)
-
-async def handle_user_name_rules(bot: commands.Bot, member: Member):
-    # Look for message rules that have matched with a regex
-    results = Rule.db.search(where('type') == RuleType.NAME.value)
-    broken_rules = []
-    for res in results:
-        for regex in res['regexes']:
-            if re.search(regex, member.display_name):
-                broken_rules.append(res['id'])
-                break
-
-    if len(broken_rules) > 0:
-        logger.info(
-            f'User name of {member} triggered some rules: {member.display_name}')
-
-    # Execute all actions related to matched rules
-    for rule_id in broken_rules:
-        rule = get_by_id(rule_id)
-        await rule.execute(bot, member)
 
 def get_by_id(rule_id):
     entries = Rule.db.search(where('id') == rule_id)
     if len(entries) > 0:
         return from_entry(entries[0])
     return None
+
 
 def from_entry(entry):
     return Rule(
@@ -110,11 +29,15 @@ def from_entry(entry):
         entry['actions']
     )
 
+
 class RuleType(Enum):
     MESSAGE = "message"
     ACTIVITY = "activity"
     REACTION = "reaction"
     NAME = "name"
+    POINTS_LESS_THAN = "less points"
+    POINTS_GREATER_THAN = "more points"
+
 
 class Rule:
     db = TinyDB("rules.json")
@@ -164,7 +87,11 @@ class Rule:
             case RuleType.REACTION:
                 rules += f'Jeśli użytkownik użyje reakcji: {self.regexes}, wykonaj akcje: '
             case RuleType.NAME:
-                rules += f'Jeśli nazwa użytkownika zawiera regex: {self.regexes}, wykonaj akcję: '
+                rules += f'Jeśli nazwa użytkownika zawiera regex: {self.regexes}, wykonaj akcje: '
+            case RuleType.POINTS_LESS_THAN:
+                rules += f'Jeśli użytkownik ma mniej niż {self.regexes[0]} punktów, wykonaj akcje: '
+            case RuleType.POINTS_LESS_THAN:
+                rules += f'Jeśli użytkownik ma więcej niż {self.regexes[0]} punktów, wykonaj akcje: '
 
         for action_id in self.actions:
             action: Action = lajter.action.get_by_id(action_id)
@@ -173,13 +100,57 @@ class Rule:
         rules += "\n"
         return rules
 
+    async def check(
+            self,
+            bot: commands.Bot = None,
+            member: Member = None,
+            db_user: lajter.user.User = None,
+            channel: TextChannel = None,
+            message: Message = None,
+            reaction: Reaction = None
+    ) -> bool:
+        match self.rule_type:
+            case RuleType.MESSAGE:
+                for regex in self.regexes:
+                    if re.search(regex, message.content):
+                        return True
+            case RuleType.ACTIVITY:
+                for regex in self.regexes:
+                    for activity in member.activities:
+                        if type(activity) is Spotify:
+                            if (re.search(regex, activity.title)
+                                    or re.search(regex, activity.artist)):
+                                return True
+                        else:
+                            if re.search(regex, activity.name):
+                                return True
+            case RuleType.REACTION:
+                for regex in self.regexes:
+                    if reaction.emoji == regex:
+                        return True
+            case RuleType.NAME:
+                for regex in self.regexes:
+                    if re.search(regex, member.display_name):
+                        return True
+            case RuleType.POINTS_LESS_THAN:
+                if self.regexes:
+                    if db_user and db_user.points < int(self.regexes[0]):
+                        return True
+            case RuleType.POINTS_GREATER_THAN:
+                if self.regexes:
+                    if db_user.points > int(self.regexes[0]):
+                        return True
+
+        return False
+
     async def execute(
             self,
-            client,
-            user=None,
-            channel=None,
-            message=None,
+            bot: commands.Bot = None,
+            member: Member = None,
+            db_user: lajter.user.User = None,
+            channel: TextChannel = None,
+            message: Message = None
     ):
         for action_id in self.actions:
             action = lajter.action.get_by_id(action_id)
-            await action.execute(client, user, channel, message)
+            await action.execute(bot, member, db_user, channel, message)
