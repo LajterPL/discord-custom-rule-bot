@@ -16,11 +16,13 @@ logger.setLevel(logging.DEBUG)
 def register_commands(bot: commands.Bot):
     logger.info("Registering commands...")
     bot.add_command(read_rules)
+    bot.add_command(read_rule_types)
     bot.add_command(add_rule)
     bot.add_command(remove_rule)
     bot.add_command(edit_rule)
 
     bot.add_command(read_actions)
+    bot.add_command(read_action_types)
     bot.add_command(add_action)
     bot.add_command(remove_action)
     bot.add_command(edit_action)
@@ -93,10 +95,22 @@ async def read_rules(ctx: commands.Context):
     await ctx.reply(rules)
 
 
+@commands.command(name="ruletypes")
+async def read_rule_types(ctx: commands.Context):
+    if not utils.is_admin(ctx.author):
+        return
+
+    s = "**Dostępne rodzaje zasad:** "
+    for rule_type in lajter.rule.RuleType:
+        s += f'`{rule_type.value}` '
+
+    await ctx.reply(s)
+
+
 '''ACTIONS'''
 
 class ActionFlags(commands.FlagConverter):
-    action_type: str = commands.flag(default=None, name="type", aliases=["t"])
+    action_type: str = commands.flag(default=None, name="type")
     value: Tuple[str, ...] = commands.flag(default=(), aliases=["v"])
     target: Tuple[str, ...] = commands.flag(default=(), aliases=["t"])
 
@@ -159,3 +173,14 @@ async def read_actions(ctx: commands.Context):
         actions += action.to_string()
         actions += "\n"
     await ctx.reply(actions)
+
+@commands.command(name="actiontypes")
+async def read_action_types(ctx: commands.Context):
+    if not utils.is_admin(ctx.author):
+        return
+
+    s = "**Dostępne rodzaje akcji:** "
+    for action_type in lajter.action.ActionType:
+        s += f'`{action_type.value}` '
+
+    await ctx.reply(s)
