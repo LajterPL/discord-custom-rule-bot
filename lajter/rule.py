@@ -3,7 +3,6 @@ import logging
 from enum import Enum
 from typing import List
 
-import discord
 from discord import Member, Spotify, Reaction, TextChannel, Message
 from discord.ext import commands
 from tinydb import TinyDB, where

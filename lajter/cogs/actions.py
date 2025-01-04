@@ -1,6 +1,5 @@
 from typing import Tuple
 
-from discord import Message
 from discord.ext import commands
 import lajter.action
 from lajter.action import Action

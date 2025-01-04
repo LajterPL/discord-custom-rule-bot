@@ -4,7 +4,6 @@ from datetime import timedelta
 from discord import Member, TextChannel, Message
 from discord.ext import commands
 from tinydb import TinyDB, where
-import discord
 import logging
 from enum import Enum
 

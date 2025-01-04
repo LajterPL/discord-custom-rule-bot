@@ -1,8 +1,7 @@
 import logging
 from typing import Tuple, List
-import re
 
-from discord import Member, Spotify, TextChannel, Message, Reaction
+from discord import Member, TextChannel, Message, Reaction
 from discord.ext import commands
 from tinydb import where
 

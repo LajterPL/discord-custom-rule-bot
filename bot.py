@@ -2,11 +2,11 @@ import asyncio
 import os
 import logging
 
-from discord import Intents, Message, Member, Reaction
+from discord import Intents
 from discord.ext import commands
 from dotenv import load_dotenv
 
-logger = logging.getLogger('EVENT')
+logger = logging.getLogger('MAIN')
 logger.setLevel(logging.DEBUG)
 
 load_dotenv()
