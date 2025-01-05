@@ -17,7 +17,7 @@ def from_entry(entry):
 class User:
     db = TinyDB("users.json")
 
-    def __init__(self, user_id: int, points: int = 0, last_activity: datetime = datetime.now()):
+    def __init__(self, user_id: int, points: int = 100, last_activity: datetime = datetime.now()):
         self.id = user_id
         self.points = points
         self.last_activity = last_activity
