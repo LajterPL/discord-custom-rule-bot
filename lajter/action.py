@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 from datetime import timedelta
 
@@ -39,6 +40,7 @@ class ActionType(Enum):
     REMOVE_ROLE = "remove role"
     CHANGE_NAME = "change name"
     ADD_POINTS = "add points"
+    POLL = "poll"
 
 class Action:
     db = TinyDB("actions.json")
@@ -118,6 +120,18 @@ class Action:
                 s += f'Dodaj {self.value[0]} punktów'
                 if self.target:
                     s += f' użytkownikowi {self.target[0]}'
+            case ActionType.POLL:
+                s += f'Rozpocznij głosowanie przeciwko użytkownikowi'
+                if len(self.target) > 1:
+                    s += f' {self.target[1]}'
+                if self.target:
+                    s += f' na kanale {self.target[0]}'
+                s += "."
+                if self.value:
+                    s += f' Jeśli głosowanie przejdzie, wykonaj akcję nr {self.value[0]}.'
+                if len(self.value) > 1:
+                    s += f' Głosowanie będzie trwało {self.value[1]} sekund.'
+
         return s
     async def execute(
             self,
@@ -197,7 +211,8 @@ class Action:
                     target = member
                     if self.target:
                         target = await member_from_mention(member.guild, self.target[0])
-                    await target.edit(nick=self.value[0])
+                    if target.guild.owner is not target:
+                        await target.edit(nick=self.value[0])
                 except Exception:
                     logger.warning(f'Failed to change name: {traceback.format_exc()}')
             case ActionType.ADD_POINTS:
@@ -209,6 +224,62 @@ class Action:
 
                     target.points += int(self.value[0])
                     target.save()
+                except Exception:
+                    logger.warning(
+                        f'Failed to change name: {traceback.format_exc()}')
+            case ActionType.POLL:
+                try:
+                    target = member
+                    target_channel = channel
+
+                    if self.target:
+                        target_channel = await bot.fetch_channel(
+                            self.target[0][2:-1])
+
+                    if len(self.target) > 1:
+                        target = await member_from_mention(member.guild,
+                                                           self.target[1])
+
+                    timeout = timedelta(minutes=5)
+                    action_to_execute = None
+
+                    if self.value:
+                        action_to_execute = get_by_id(int(self.value[0]))
+                    if len(self.value) > 1:
+                        timeout = timedelta(seconds=int(self.value[1]))
+
+                    s = f'Rozpoczęto głosowanie przeciwko {target.mention}. Potrzebna powyżej 50% głosów'
+                    if action_to_execute:
+                        s += f', żeby wykonać akcję: {action_to_execute.to_string()}'
+                    s += "."
+                    s += f' Głosowanie potrwa: `{timeout}`'
+
+                    poll = await target_channel.send(s)
+                    await poll.add_reaction("👍")
+                    await poll.add_reaction("👎")
+
+                    await asyncio.sleep(timeout.seconds)
+
+                    poll = await target_channel.fetch_message(poll.id)
+
+                    result = 0
+
+                    for reaction in poll.reactions:
+                        if reaction.emoji == "👍":
+                            result += reaction.count
+                        elif reaction.emoji == "👎":
+                            result -= reaction.count
+
+                    if result > 0:
+                        await poll.reply(f'Głosowanie przeciwko {target.mention} przeszło większością głosów.')
+                        if action_to_execute:
+                            if target != member:
+                                db_user = lajter.user.get_by_id(target.id)
+                            await action_to_execute.execute(bot, target, db_user, channel)
+                    else:
+                        await poll.reply(f'Głosowanie przeciwko {target.mention} nie uzyskało większości głosów.')
+
+
                 except Exception:
                     logger.warning(
                         f'Failed to change name: {traceback.format_exc()}')

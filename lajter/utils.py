@@ -5,9 +5,15 @@ import discord
 from discord.utils import get
 
 
-def is_admin(user: discord.Member) -> bool:
+def immune(user: discord.Member) -> bool:
+    if type(user) is discord.User:
+        return True
+
     if user.bot:
         return True
+
+    # if user.guild.owner is user:
+    #     return True
 
     for role in user.roles:
         if role.permissions.administrator:

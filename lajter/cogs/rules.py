@@ -1,6 +1,7 @@
 import logging
 from typing import Tuple, List
 
+import discord.utils
 from discord import Member, TextChannel, Message, Reaction
 from discord.ext import commands
 from tinydb import where
@@ -13,8 +14,9 @@ import lajter.user
 import lajter.utils as utils
 
 
-logger = logging.getLogger('RULES')
+logger = logging.getLogger('RULE')
 logger.setLevel(logging.DEBUG)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(Rules(bot))
 
@@ -36,6 +38,9 @@ async def handle_rules(
         rules = [lajter.rule.from_entry(entry) for entry in rules]
         broken_rules.extend([rule for rule in rules if await rule.check(bot, member, db_user, channel, message, reaction)])
 
+    if broken_rules:
+        logger.info(f'Użytkownik {member} złamał zasady: {[rule.id for rule in broken_rules]}')
+
     for rule in broken_rules:
         await rule.execute(bot, member, db_user, channel, message)
 
@@ -52,7 +57,7 @@ class Rules(commands.Cog):
 
     @commands.Cog.listener()
     async def on_presence_update(self, before: Member, after: Member):
-        if lajter.utils.is_admin(after):
+        if lajter.utils.immune(after):
             return
 
         if before.activities:
@@ -62,10 +67,11 @@ class Rules(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
-        if not utils.is_admin(message.author):
+        if not utils.immune(message.author):
             await handle_rules(
                 [
                     RuleType.MESSAGE,
+                    RuleType.ROLE,
                     RuleType.POINTS_LESS_THAN,
                     RuleType.POINTS_GREATER_THAN
                 ],
@@ -78,41 +84,42 @@ class Rules(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: Message, after: Message):
-        if not utils.is_admin(after.author):
+        if not utils.immune(after.author):
             await handle_rules([RuleType.MESSAGE], bot=self.bot, message=after)
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction: Reaction, member: Member):
-        if not utils.is_admin(member):
+        if not utils.immune(member):
             await handle_rules([RuleType.REACTION], bot=self.bot, member=member, reaction=reaction)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: Member):
-        if not utils.is_admin(member):
+        if not utils.immune(member):
             await handle_rules([RuleType.NAME], bot=self.bot, member=member)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: Member, after: Member):
-        if not utils.is_admin(after):
+        if not utils.immune(after):
             await handle_rules([RuleType.NAME], bot=self.bot, member=before)
             await handle_rules([RuleType.NAME], bot=self.bot, member=after)
 
-    @commands.command(name="addrule")
+    @commands.command(
+        name="addrule",
+        brief="Dodaj zasadę",
+        help="type: <typ zasady> regex: <wartość> action: <id akcji>"
+    )
+    @commands.has_guild_permissions(administrator=True)
     async def add_rule(self, ctx: commands.Context, *, flags: RuleFlags):
-        if not utils.is_admin(ctx.author):
-            return
-
         rule = Rule(flags.rule_type, regexes=list(flags.regexes),
                     actions=list(flags.actions))
         rule.save()
+        logger.info(f'{ctx.author} utworzył zasadę: {rule.to_string()}')
         await ctx.send(f'Utworzono zasadę: {rule.to_string()}')
 
 
     @commands.command(name="editrule")
+    @commands.has_guild_permissions(administrator=True)
     async def edit_rule(self, ctx: commands.Context, rule_id: int, *, flags: RuleFlags):
-        if not utils.is_admin(ctx.author):
-            return
-
         if rule_id <= 0:
             await ctx.send("Niepoprawne id zasady")
             return
@@ -133,22 +140,21 @@ class Rules(commands.Cog):
             rule.actions = list(flags.actions)
 
         rule.save()
+        logger.info(f'{ctx.author} nadpisał zasadę: {rule.to_string()}')
         await ctx.send(f'Nadpisano zasadę: {rule.to_string()}')
 
 
     @commands.command(name="delrule")
+    @commands.has_guild_permissions(administrator=True)
     async def remove_rule(self, ctx: commands.Context, rule_id: int):
-        if not utils.is_admin(ctx.author):
-            return
         Rule.db.remove(doc_ids=[rule_id])
+        logger.info(f'{ctx.author} usunął zasadę: {rule_id}')
         await ctx.send(f'Usunięto zasadę nr **{rule_id}**')
 
 
-    @commands.command(name="rules")
+    @commands.command(name="rules", brief="Wyświetl zasady")
+    @commands.has_guild_permissions(administrator=True)
     async def read_rules(self, ctx: commands.Context):
-        if not utils.is_admin(ctx.author):
-            return
-
         rules = ""
         for rule_entry in Rule.db.all():
             rule = lajter.rule.from_entry(rule_entry)
@@ -156,11 +162,9 @@ class Rules(commands.Cog):
         await ctx.reply(rules)
 
 
-    @commands.command(name="ruletypes")
+    @commands.command(name="ruletypes", brief="Wyświetl typy zasad")
+    @commands.has_guild_permissions(administrator=True)
     async def read_rule_types(self, ctx: commands.Context):
-        if not utils.is_admin(ctx.author):
-            return
-
         s = "**Dostępne rodzaje zasad:** "
         for rule_type in lajter.rule.RuleType:
             s += f'`{rule_type.value}` '

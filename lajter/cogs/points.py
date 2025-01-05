@@ -1,11 +1,17 @@
+import logging
+import random
 from datetime import datetime
 
-from discord import Member, Message
+from discord import Member, Message, User
 from discord.ext import commands
 import lajter.action
 import lajter.rule
 import lajter.user
 import lajter.utils
+from lajter.cogs.rules import handle_rules
+
+logger = logging.getLogger('POINTS')
+logger.setLevel(logging.DEBUG)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Points(bot))
@@ -16,7 +22,7 @@ class Points(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
-        if message.author.bot:
+        if message.author.bot or type(message.author) is User:
             return
 
         user = lajter.user.get_by_id(message.author.id)
@@ -26,14 +32,19 @@ class Points(commands.Cog):
         user.points += lajter.utils.rate_message(message.content)
         user.save()
 
-    @commands.command(name="points")
+    @commands.command(name="points", brief="Wyświetl posiadane punkty")
     async def read_points(self, ctx: commands.Context):
         user = lajter.user.get_by_id(ctx.author.id)
 
         await ctx.reply(f'Posiadasz **{user.points}** punktów')
 
-    @commands.command(name="give")
-    async def give_points(self, ctx: commands.Context, target: Member, value: int):
+    @commands.command(name="give", brief="Przekaż komuś punkty")
+    @commands.guild_only()
+    async def give_points(
+            self,
+            ctx: commands.Context,
+            target: Member = commands.parameter(description="Komu punkty zostaną przekazane"),
+            value: int = commands.parameter(description="Kwota jaka zostanie przekazana")):
 
         if value < 0:
             await ctx.reply(f'Niewłaściwa liczba punktów')
@@ -53,15 +64,33 @@ class Points(commands.Cog):
             receiver.points += value
             receiver.save()
 
+            logger.info(f'{ctx.author} przekazał {target} {value} punktów')
             await ctx.reply(f'Oddajesz {target.mention} **{value}** punktów')
-            await lajter.rule.handle_point_rules(member=ctx.author,
-                                                 channel=ctx.channel,
-                                                 message=ctx.message)
-            await lajter.rule.handle_point_rules(member=target,
-                                                 channel=ctx.channel,
-                                                 message=ctx.message)
+            await handle_rules(
+                [
+                    lajter.rule.RuleType.POINTS_LESS_THAN,
+                    lajter.rule.RuleType.POINTS_GREATER_THAN
+                ],
+                bot=self.bot,
+                member=ctx.author,
+                db_user=giver,
+                channel=ctx.channel,
+                message=ctx.message
+            )
+            await handle_rules(
+                [
+                    lajter.rule.RuleType.POINTS_LESS_THAN,
+                    lajter.rule.RuleType.POINTS_GREATER_THAN
+                ],
+                bot=self.bot,
+                member=target,
+                db_user=receiver,
+                channel=ctx.channel,
+                message=ctx.message
+            )
 
-    @commands.command(name="top")
+    @commands.command(name="top", aliases=["leaderboard"], brief="Wyświetl tabelę punktów")
+    @commands.guild_only()
     async def point_leaderboard(self, ctx: commands.Context):
 
         users = lajter.user.User.db.all()
@@ -75,3 +104,33 @@ class Points(commands.Cog):
             except Exception:
                 pass
         await ctx.reply(s)
+
+    @commands.command(name="coinflip", brief="Rzuć monetą, żeby wygrać punkty")
+    @commands.guild_only()
+    async def coin_flip(self, ctx: commands.Context, amount: int):
+        user = lajter.user.get_by_id(ctx.author.id)
+
+        if amount <= 0 or amount > user.points:
+            await ctx.reply("Niewłaściwa liczba punktów")
+            return
+
+        if bool(random.getrandbits(1)):
+            user.points += amount
+            await ctx.reply(f'Wygrywasz **{amount}** punktów')
+        else:
+            user.points -= amount
+            await ctx.reply(f'Tracisz **{amount}** punktów')
+
+        user.save()
+
+        await handle_rules(
+            [
+                lajter.rule.RuleType.POINTS_LESS_THAN,
+                lajter.rule.RuleType.POINTS_GREATER_THAN
+            ],
+            bot=self.bot,
+            member=ctx.author,
+            db_user=user,
+            channel=ctx.channel,
+            message=ctx.message
+        )

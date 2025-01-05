@@ -36,6 +36,7 @@ class RuleType(Enum):
     NAME = "name"
     POINTS_LESS_THAN = "less points"
     POINTS_GREATER_THAN = "more points"
+    ROLE = "role"
 
 
 class Rule:
@@ -91,6 +92,11 @@ class Rule:
                 rules += f'Jeśli użytkownik ma mniej niż {self.regexes[0]} punktów, wykonaj akcje: '
             case RuleType.POINTS_LESS_THAN:
                 rules += f'Jeśli użytkownik ma więcej niż {self.regexes[0]} punktów, wykonaj akcje: '
+            case RuleType.ROLE:
+                rules += f'Jeśli użytkownik ma rolę {self.regexes[0]}'
+                if len(self.regexes) > 1:
+                    rules += f' i wyśle wiadomość zawierającą regex {self.regexes[1:]}'
+                rules += ", wykonaj akcje: "
 
         for action_id in self.actions:
             action: Action = lajter.action.get_by_id(action_id)
@@ -139,6 +145,17 @@ class Rule:
                 if self.regexes:
                     if db_user.points > int(self.regexes[0]):
                         return True
+            case RuleType.ROLE:
+                if self.regexes:
+                    role = lajter.action.role_from_mention(member.guild, self.regexes[0])
+                    if role:
+                        if len(self.regexes) > 1:
+                            for regex in self.regexes[1:]:
+                                if re.search(regex, message.content):
+                                    return True
+                        else:
+                            return True
+
 
         return False
 
