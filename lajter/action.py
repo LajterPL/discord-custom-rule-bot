@@ -141,6 +141,9 @@ class Action:
             channel: TextChannel = None,
             message: Message = None,
     ):
+        if channel is None:
+            channel = await lajter.utils.get_default_channel(bot)
+
         match self.action_type:
             case ActionType.SEND_MESSAGE:
                 try:
@@ -248,10 +251,10 @@ class Action:
                     if len(self.value) > 1:
                         timeout = timedelta(seconds=int(self.value[1]))
 
-                    s = f'Rozpoczęto głosowanie przeciwko {target.mention}. Potrzebna powyżej 50% głosów'
+                    s = f'Rozpoczęto głosowanie przeciwko {target.mention}.\nPotrzeba powyżej 50% głosów'
                     if action_to_execute:
                         s += f', żeby wykonać akcję: {action_to_execute.to_string()}'
-                    s += "."
+                    s += ".\n"
                     s += f' Głosowanie potrwa: `{timeout}`'
 
                     poll = await target_channel.send(s)

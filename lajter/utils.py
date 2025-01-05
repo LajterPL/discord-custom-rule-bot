@@ -1,9 +1,11 @@
+import os
 import random
 import re
 
 import discord
+from discord import Guild, TextChannel
 from discord.utils import get
-
+from discord.ext import commands
 
 def immune(user: discord.Member) -> bool:
     if type(user) is discord.User:
@@ -56,3 +58,15 @@ def rate_message(message: str) -> int:
         points += 10
 
     return min(points, 100)
+
+async def get_default_guild(bot: commands.Bot) -> Guild | None:
+    guild_id = os.getenv("DEFAULT_GUILD")
+    if guild_id:
+        return bot.get_guild(int(guild_id))
+    return None
+
+async def get_default_channel(bot: commands.Bot) -> TextChannel | None:
+    channel_id = os.getenv("DEFAULT_CHANNEL")
+    if channel_id:
+        return await bot.fetch_channel(int(channel_id))
+    return None
