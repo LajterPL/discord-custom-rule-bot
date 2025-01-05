@@ -2,6 +2,7 @@ import logging
 import random
 from datetime import datetime
 
+import discord
 from discord import Member, Message, User
 from discord.ext import commands
 import lajter.action
@@ -19,6 +20,21 @@ async def setup(bot: commands.Bot):
 class Points(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        guild: discord.Guild = await lajter.utils.get_default_guild(self.bot)
+
+        for member in guild.members:
+            if not member.bot and lajter.user.get_by_id(member.id) is None:
+                db_user = lajter.user.User(member.id)
+                db_user.save()
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: Member):
+        if not member.bot and lajter.user.get_by_id(member.id) is None:
+            db_user = lajter.user.User(member.id)
+            db_user.save()
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
