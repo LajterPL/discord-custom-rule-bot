@@ -1,3 +1,4 @@
+import datetime
 import re
 import logging
 from enum import Enum
@@ -37,6 +38,7 @@ class RuleType(Enum):
     POINTS_LESS_THAN = "less points"
     POINTS_GREATER_THAN = "more points"
     ROLE = "role"
+    LAST_ACTIVITY = "last activity"
 
 
 class Rule:
@@ -97,6 +99,9 @@ class Rule:
                 if len(self.regexes) > 1:
                     rules += f' i wyśle wiadomość zawierającą regex {self.regexes[1:]}'
                 rules += ", wykonaj akcje: "
+            case RuleType.LAST_ACTIVITY:
+                rules += (f'Jeśli ostatnia wiadomość użytkownika była ponad '
+                          f'{self.regexes[0]} minut temu, wykonaj akcje: ')
 
         for action_id in self.actions:
             action: Action = lajter.action.get_by_id(action_id)
@@ -155,7 +160,12 @@ class Rule:
                                     return True
                         else:
                             return True
-
+            case RuleType.LAST_ACTIVITY:
+                if self.regexes:
+                    last_activity = db_user.last_activity
+                    time_difference = datetime.datetime.now() - last_activity
+                    if time_difference.seconds > int(self.regexes[0]) * 60:
+                        return True
 
         return False
 

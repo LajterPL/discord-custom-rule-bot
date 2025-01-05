@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Tuple, List
 
@@ -54,6 +55,26 @@ class Rules(commands.Cog):
         rule_type: str = commands.flag(default=None, name="type", aliases=["t"])
         regexes: Tuple[str, ...] = commands.flag(default=(), aliases=["regex", "r"])
         actions: Tuple[int, ...] = commands.flag(default=(), aliases=["action", "a"])
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        guild: discord.Guild = await lajter.utils.get_default_guild(self.bot)
+
+        while True:
+
+            for user_entry in lajter.user.User.db.all():
+                db_user = lajter.user.from_entry(user_entry)
+                member = guild.get_member(db_user.id)
+
+                if not lajter.utils.immune(member):
+                    await handle_rules(
+                        [RuleType.LAST_ACTIVITY],
+                        bot=self.bot,
+                        member=member,
+                        db_user=db_user
+                    )
+
+            await asyncio.sleep(60)
 
     @commands.Cog.listener()
     async def on_presence_update(self, before: Member, after: Member):
