@@ -123,8 +123,13 @@ class Points(commands.Cog):
 
     @commands.command(name="coinflip", brief="Rzuć monetą, żeby wygrać punkty")
     @commands.guild_only()
-    async def coin_flip(self, ctx: commands.Context, amount: int):
+    async def coin_flip(self, ctx: commands.Context, amount):
         user = lajter.user.get_by_id(ctx.author.id)
+
+        try:
+            amount = int(amount)
+        except ValueError:
+            amount = user.points
 
         if amount <= 0 or amount > user.points:
             await ctx.reply("Niewłaściwa liczba punktów")
