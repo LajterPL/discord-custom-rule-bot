@@ -152,14 +152,15 @@ class Rule:
                         return True
             case RuleType.ROLE:
                 if self.regexes:
-                    role = lajter.action.role_from_mention(member.guild, self.regexes[0])
-                    if role:
-                        if len(self.regexes) > 1:
-                            for regex in self.regexes[1:]:
-                                if re.search(regex, message.content):
-                                    return True
-                        else:
-                            return True
+                    target_role = lajter.action.role_from_mention(member.guild, self.regexes[0])
+                    for role in member.roles:
+                        if role.id == target_role.id:
+                            if len(self.regexes) > 1:
+                                for regex in self.regexes[1:]:
+                                    if re.search(regex, message.content):
+                                        return True
+                            else:
+                                return True
             case RuleType.LAST_ACTIVITY:
                 if self.regexes:
                     last_activity = db_user.last_activity
