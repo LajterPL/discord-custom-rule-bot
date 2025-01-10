@@ -69,6 +69,10 @@ class Points(commands.Cog):
         giver = lajter.user.get_by_id(ctx.author.id)
         receiver = lajter.user.get_by_id(target.id)
 
+        if giver.id == receiver.id:
+            await ctx.reply(f'Nie możesz dawać pieniędzy sobie samemu')
+            return
+
         if value > giver.points:
             await ctx.reply(f'Masz za mało punktów na koncie')
             return
