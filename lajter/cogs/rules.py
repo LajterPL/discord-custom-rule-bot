@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 from typing import Tuple, List
 
@@ -39,11 +40,14 @@ async def handle_rules(
         rules = [lajter.rule.from_entry(entry) for entry in rules]
         broken_rules.extend([rule for rule in rules if await rule.check(bot, member, db_user, channel, message, reaction)])
 
-    if broken_rules:
-        logger.info(f'Użytkownik {member} złamał zasady: {[rule.id for rule in broken_rules]}')
-
     for rule in broken_rules:
         await rule.execute(bot, member, db_user, channel, message)
+
+    if broken_rules:
+        logger.info(f'Użytkownik {member} złamał zasady: {[rule.id for rule in broken_rules]}')
+        db_user.last_activity = datetime.datetime.now()
+        db_user.save()
+
 
 
 class Rules(commands.Cog):
@@ -124,6 +128,13 @@ class Rules(commands.Cog):
             await handle_rules([RuleType.NAME], bot=self.bot, member=before)
             await handle_rules([RuleType.NAME], bot=self.bot, member=after)
 
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: Member):
+        channel = await utils.get_default_channel(self.bot)
+        db_user = lajter.user.get_by_id(member.id)
+
+        await channel.send(f'{member.mention} opuszcza nas z wynikiem {db_user.points} punktów')
+
     @commands.command(
         name="addrule",
         brief="Dodaj zasadę",
@@ -180,7 +191,19 @@ class Rules(commands.Cog):
         for rule_entry in Rule.db.all():
             rule = lajter.rule.from_entry(rule_entry)
             rules += rule.to_string()
-        await ctx.reply(rules)
+            if len(rules) > 1500:
+                await ctx.reply(rules)
+                rules = ""
+
+        if len(rules) > 0:
+            await ctx.reply(rules)
+
+    @commands.command(name="rule", brief="Wyświetl zasade")
+    @commands.has_guild_permissions(administrator=True)
+    async def read_rulee(self, ctx: commands.Context, rule_id: int):
+        rule = lajter.rule.get_by_id(rule_id)
+        if rule:
+            await ctx.reply(rule.to_string())
 
 
     @commands.command(name="ruletypes", brief="Wyświetl typy zasad")
