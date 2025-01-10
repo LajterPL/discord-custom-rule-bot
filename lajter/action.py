@@ -281,8 +281,9 @@ class Action:
                             await action_to_execute.execute(bot, target, db_user, channel)
                     else:
                         await poll.reply(f'Głosowanie przeciwko {target.mention} nie uzyskało większości głosów.')
-
-
                 except Exception:
                     logger.warning(
                         f'Failed to change name: {traceback.format_exc()}')
+
+        if db_user:
+            db_user.save()
