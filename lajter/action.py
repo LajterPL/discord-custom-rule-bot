@@ -1,4 +1,5 @@
 import asyncio
+import random
 import traceback
 from datetime import timedelta
 
@@ -41,6 +42,8 @@ class ActionType(Enum):
     CHANGE_NAME = "change name"
     ADD_POINTS = "add points"
     POLL = "poll"
+    RANDOM = "random"
+    CHAIN = "chain"
 
 class Action:
     db = TinyDB("actions.json")
@@ -131,6 +134,14 @@ class Action:
                     s += f' Jeśli głosowanie przejdzie, wykonaj akcję nr {self.value[0]}.'
                 if len(self.value) > 1:
                     s += f' Głosowanie będzie trwało {self.value[1]} sekund.'
+            case ActionType.RANDOM:
+                s += "Wybierz losową akcję spośród: "
+                for value in self.value:
+                    s += f'{value}, '
+            case ActionType.CHAIN:
+                s += "Wykonaj po kolei akcje: "
+                for value in self.value:
+                    s += f'{value}, '
 
         return s
     async def execute(
@@ -207,6 +218,7 @@ class Action:
                     if self.target:
                         target = await member_from_mention(member.guild, self.target[0])
                     await target.ban(delete_message_seconds=0)
+                    lajter.user.User.db.remove(where('id') == db_user.id)
                 except Exception:
                     logger.warning(f'Failed to ban an user: {traceback.format_exc()}')
             case ActionType.CHANGE_NAME:
@@ -283,7 +295,38 @@ class Action:
                         await poll.reply(f'Głosowanie przeciwko {target.mention} nie uzyskało większości głosów.')
                 except Exception:
                     logger.warning(
-                        f'Failed to change name: {traceback.format_exc()}')
+                        f'Failed to make a poll: {traceback.format_exc()}')
+            case ActionType.RANDOM:
+                try:
+                    target = member
+                    target_channel = channel
+
+                    if self.target:
+                        target_channel = await bot.fetch_channel(
+                            self.target[0][2:-1])
+
+                    if self.value:
+                        random_action = random.choice(self.value)
+                        random_action = get_by_id(int(random_action))
+                        await random_action.execute(bot, target, db_user, target_channel, message)
+                except Exception:
+                    logger.warning(
+                        f'Failed to make random choice: {traceback.format_exc()}')
+            case ActionType.CHAIN:
+                try:
+                    target = member
+                    target_channel = channel
+
+                    if self.target:
+                        target_channel = await bot.fetch_channel(
+                            self.target[0][2:-1])
+
+                    for action_id in self.value:
+                        action = get_by_id(int(action_id))
+                        await action.execute(bot, member, db_user, channel,message)
+                except Exception:
+                    logger.warning(
+                        f'Failed to execute action chain: {traceback.format_exc()}')
 
         if db_user:
             db_user.save()
