@@ -24,6 +24,8 @@ async def load_commands(bot):
     await bot.load_extension("lajter.cogs.rules")
     await bot.load_extension("lajter.cogs.actions")
     await bot.load_extension("lajter.cogs.points")
+    await bot.load_extension("lajter.cogs.fun")
+    await bot.load_extension("lajter.cogs.admin")
 
 asyncio.run(load_commands(bot))
 
