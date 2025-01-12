@@ -3,33 +3,33 @@ import random
 import re
 
 import discord
-from discord import Guild, TextChannel
+from discord import Guild, TextChannel, Role, Member, User
+from discord.ext.commands import check, Context
 from discord.utils import get
 from discord.ext import commands
 
-def immune(user: discord.Member) -> bool:
-    if not user or type(user) is discord.User:
+def immune(member: Member) -> bool:
+    if not member or type(member) is User:
         return True
 
-    if user.bot:
+    if member.bot or is_banned(member):
         return True
 
-    # if user.guild.owner is user:
-    #     return True
+    if member.guild.owner is member:
+        return True
 
-    for role in user.roles:
+    for role in member.roles:
         if role.permissions.administrator:
             return True
 
     return False
 
 
-def role_from_mention(guild: discord.Guild, mention: str) -> discord.Role:
+def role_from_mention(guild: Guild, mention: str) -> Role:
     return get(guild.roles, id=int(mention[3:-1]))
 
 
-async def member_from_mention(guild: discord.Guild,
-                              mention: str) -> discord.Member:
+async def member_from_mention(guild: Guild,mention: str) -> Member:
     return await guild.fetch_member(int(mention[2:-1]))
 
 
@@ -70,3 +70,22 @@ async def get_default_channel(bot: commands.Bot) -> TextChannel | None:
     if channel_id:
         return await bot.fetch_channel(int(channel_id))
     return None
+
+async def get_ban_role(bot: commands.Bot) -> Role | None:
+    role_id = os.getenv("BAN_ROLE")
+    if role_id:
+        guild: Guild = await get_default_guild(bot)
+        return guild.get_role(int(role_id))
+    return None
+
+def is_banned(member: Member) -> bool:
+    role_id = os.getenv("BAN_ROLE")
+    for role in member.roles:
+        if role.id == int(role_id):
+            return True
+    return False
+
+def not_banned():
+    async def predicate(ctx: Context):
+        return not is_banned(ctx.author)
+    return check(predicate)
