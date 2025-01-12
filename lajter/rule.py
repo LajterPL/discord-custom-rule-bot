@@ -22,12 +22,22 @@ def get_by_id(rule_id):
 
 
 def from_entry(entry):
-    return Rule(
-        entry['type'],
-        entry['id'],
-        entry['regexes'],
-        entry['actions']
-    )
+    try:
+        return Rule(
+            entry['type'],
+            entry['id'],
+            entry['regexes'],
+            entry['actions'],
+            entry['public']
+        )
+    except KeyError:
+        return Rule(
+            entry['type'],
+            entry['id'],
+            entry['regexes'],
+            entry['actions']
+        )
+
 
 
 class RuleType(Enum):
@@ -44,11 +54,13 @@ class RuleType(Enum):
 class Rule:
     db = TinyDB("rules.json")
 
-    def __init__(self, rule_type, rule_id=None, regexes=None, actions=None):
+    def __init__(self, rule_type: RuleType | str, rule_id=None, regexes=None, actions=None, public=False):
         self.id: int = rule_id
 
         if type(rule_type) is str:
             self.rule_type: RuleType = RuleType(rule_type)
+        else:
+            self.rule_type = rule_type
 
         if regexes is None:
             self.regexes: List[str] = []
@@ -60,13 +72,21 @@ class Rule:
         else:
             self.actions: List[int] = actions
 
+        if public is None:
+            self.public = False
+        if type(public) is str:
+            self.public = bool(public)
+        else:
+            self.public = public
+
     def save(self):
         if self.id is None:
             self.id = Rule.db.insert({
                 'id': 'null',
                 'type': self.rule_type.value,
                 'regexes': self.regexes,
-                'actions': self.actions
+                'actions': self.actions,
+                'public': self.public
             })
 
             Rule.db.update({'id': self.id}, doc_ids=[self.id])
@@ -75,11 +95,14 @@ class Rule:
                 'id': self.id,
                 'type': self.rule_type.value,
                 'regexes': self.regexes,
-                'actions': self.actions
+                'actions': self.actions,
+                'public': self.public
             }, where('id') == self.id)
 
-    def to_string(self) -> str:
-        rules = f'**{self.id}**: '
+    def to_string(self, print_id=True) -> str:
+        rules = ""
+        if print_id:
+            rules += f'**{self.id}**: '
 
         match self.rule_type:
             case RuleType.MESSAGE:
@@ -156,7 +179,8 @@ class Rule:
                         return True
             case RuleType.ROLE:
                 if self.regexes:
-                    target_role = lajter.action.role_from_mention(member.guild, self.regexes[0])
+                    target_role = lajter.action.role_from_mention(
+                        member.guild, self.regexes[0])
                     for role in member.roles:
                         if role.id == target_role.id:
                             if len(self.regexes) > 1:
