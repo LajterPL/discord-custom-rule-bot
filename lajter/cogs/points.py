@@ -5,6 +5,8 @@ from datetime import datetime
 import discord
 from discord import Member, Message, User
 from discord.ext import commands
+from tinydb import where
+
 import lajter.action
 import lajter.rule
 import lajter.user
@@ -26,9 +28,14 @@ class Points(commands.Cog):
         guild: discord.Guild = await lajter.utils.get_default_guild(self.bot)
 
         for member in guild.members:
-            if not member.bot and lajter.user.get_by_id(member.id) is None:
-                db_user = lajter.user.User(member.id)
-                db_user.save()
+            if lajter.user.get_by_id(member.id) is None:
+                if not member.bot or not lajter.utils.is_banned(member):
+                    db_user = lajter.user.User(member.id)
+                    db_user.save()
+            if member.bot or lajter.utils.is_banned(member):
+                if lajter.user.get_by_id(member.id) is not None:
+                    lajter.user.User.db.remove(where('id') == member.id)
+
 
     @commands.Cog.listener()
     async def on_member_join(self, member: Member):
@@ -38,7 +45,11 @@ class Points(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: Message):
-        if message.author.bot or type(message.author) is User:
+        if (
+                message.author.bot
+                or lajter.utils.is_banned(message.author)
+                or type(message.author) is User
+        ):
             return
 
         user = lajter.user.get_by_id(message.author.id)
@@ -49,6 +60,7 @@ class Points(commands.Cog):
         user.save()
 
     @commands.command(name="points", brief="Wyświetl posiadane punkty")
+    @lajter.utils.not_banned()
     async def read_points(self, ctx: commands.Context):
         user = lajter.user.get_by_id(ctx.author.id)
 
@@ -56,6 +68,7 @@ class Points(commands.Cog):
 
     @commands.command(name="give", brief="Przekaż komuś punkty")
     @commands.guild_only()
+    @lajter.utils.not_banned()
     async def give_points(
             self,
             ctx: commands.Context,
@@ -130,6 +143,7 @@ class Points(commands.Cog):
 
     @commands.command(name="coinflip", brief="Rzuć monetą, żeby wygrać punkty")
     @commands.guild_only()
+    @lajter.utils.not_banned()
     async def coin_flip(self, ctx: commands.Context, amount):
         user = lajter.user.get_by_id(ctx.author.id)
 
