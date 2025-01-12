@@ -106,7 +106,7 @@ class Rule:
         for action_id in self.actions:
             action: Action = lajter.action.get_by_id(action_id)
             if action is not None:
-                rules += action.to_string() + ", "
+                rules += action.to_string() + "; "
         rules += "\n"
         return rules
 
@@ -124,6 +124,10 @@ class Rule:
                 for regex in self.regexes:
                     if re.search(regex, message.content):
                         return True
+                for attachment in message.attachments:
+                    for regex in self.regexes:
+                        if re.search(regex, attachment.filename):
+                            return True
             case RuleType.ACTIVITY:
                 for regex in self.regexes:
                     for activity in member.activities:
