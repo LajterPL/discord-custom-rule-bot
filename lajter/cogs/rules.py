@@ -53,7 +53,7 @@ async def handle_rules(
 class Rules(commands.Cog):
 
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: commands.Bot = bot
 
     class RuleFlags(commands.FlagConverter):
         rule_type: str = commands.flag(default=None, name="type", aliases=["t"])
@@ -70,7 +70,17 @@ class Rules(commands.Cog):
                 db_user = lajter.user.from_entry(user_entry)
                 member = guild.get_member(db_user.id)
 
-                if not lajter.utils.immune(member):
+                if not member:
+                    user = await self.bot.fetch_user(db_user.id)
+                    if user:
+                        try:
+                            ban = await guild.fetch_ban(user)
+                            if ban:
+                                logger.info(f'User {user.name} was banned, removing them from db')
+                                lajter.user.User.db.remove(where("id") == db_user.id)
+                        except Exception:
+                            pass
+                elif not lajter.utils.immune(member):
                     await handle_rules(
                         [RuleType.LAST_ACTIVITY],
                         bot=self.bot,
