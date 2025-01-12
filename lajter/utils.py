@@ -8,7 +8,7 @@ from discord.utils import get
 from discord.ext import commands
 
 def immune(user: discord.Member) -> bool:
-    if type(user) is discord.User:
+    if not user or type(user) is discord.User:
         return True
 
     if user.bot:
