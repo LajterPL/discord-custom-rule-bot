@@ -2,6 +2,8 @@ import logging
 from typing import Tuple
 
 from discord.ext import commands
+from tinydb import where
+
 import lajter.action
 from lajter.action import Action
 import lajter.utils as utils
@@ -24,6 +26,19 @@ class Actions(commands.Cog):
         action_type: str = commands.flag(default=None, name="type")
         value: Tuple[str, ...] = commands.flag(default=(), aliases=["v"])
         target: Tuple[str, ...] = commands.flag(default=(), aliases=["t"])
+        public: bool = commands.flag(default=(False), aliases=["p"])
+
+    async def cog_command_error(
+            self,
+            ctx: commands.Context,
+            error: commands.CommandError
+    ):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.reply(f'Musisz podać argument: {error.param.name}')
+        elif isinstance(error, commands.CommandOnCooldown):
+            await ctx.reply(f'Musisz chwilę poczekać')
+        elif isinstance(error, commands.BadArgument):
+            await ctx.reply(f'Niepoprawny argument')
 
     @commands.command(
         name="addaction",
@@ -36,7 +51,7 @@ class Actions(commands.Cog):
             return
 
         action = Action(flags.action_type, value=list(flags.value),
-                        target=list(flags.target))
+                        target=list(flags.target), public=flags.public)
         action.save()
         logger.info(f'{ctx.author} utworzył akcję: {action.to_string()}')
         await ctx.send(
@@ -55,6 +70,9 @@ class Actions(commands.Cog):
         if action is None:
             await ctx.send("Nie ma akcji o podanym id")
             return
+
+        if flags.public:
+            action.public = flags.public
 
         if flags.action_type is not None:
             action.rule_type = lajter.rule.Action(flags.action_type)
@@ -87,6 +105,22 @@ class Actions(commands.Cog):
             actions += action.to_string()
             actions += "\n"
         await ctx.reply(actions)
+
+    @commands.command(name="publicactions", brief="Wyświetl publiczne akcje")
+    @commands.cooldown(1, 30)
+    async def read_public_actions(self, ctx: commands.Context):
+        actions = ""
+        for action_entry in Action.db.search(where('public') == True):
+            action = lajter.action.from_entry(action_entry)
+            actions += f'**{action.id}:** '
+            actions += action.to_string()
+            actions += "\n"
+            if len(actions) > 1500:
+                await ctx.reply(actions)
+                actions = ""
+
+        if actions:
+            await ctx.reply(actions)
 
     @commands.command(name="actiontypes", brief="Wyświetl typy akcji")
     @commands.has_guild_permissions(administrator=True)
