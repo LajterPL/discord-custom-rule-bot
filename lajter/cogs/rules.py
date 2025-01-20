@@ -262,7 +262,7 @@ class Rules(commands.Cog):
             await ctx.reply(rule.to_string())
 
     @commands.command(name="publicrules", brief="Wyświetl publiczne zasady")
-    @commands.cooldown(1, 30)
+    @commands.cooldown(3, 30)
     @commands.has_guild_permissions(administrator=True)
     async def read_public_rules(self, ctx: commands.Context):
         rules = ""
@@ -286,8 +286,7 @@ class Rules(commands.Cog):
 
         await ctx.reply(s)
 
-    @commands.command(name="voterule", brief="Rozpocznij głosowanie żeby dodać zasadę")
-    @commands.cooldown(1, 1800)
+    @commands.command(name="voterule", brief="Rozpocznij głosowanie żeby dodać zasadę - 1.5k punktów")
     @lajter.utils.not_banned()
     async def vote_rule(
             self, ctx: commands.Context,
@@ -305,16 +304,27 @@ class Rules(commands.Cog):
             await ctx.reply("Musisz podać numer publicznej akcji.")
             return
 
+        db_user = lajter.user.get_by_id(ctx.author.id)
+
+        if db_user.points < 1500:
+            await ctx.reply("Potrzebujesz **1500 punktów**, "
+                            "żeby rozpocząć głosowanie.")
+            return
+
+        db_user.points -= 1500
+        db_user.save()
+
         default_channel = await lajter.utils.get_default_channel(self.bot)
         rule = Rule(RuleType.MESSAGE, regexes=[word],
                     actions=[action_id], public=True)
 
-        timeout = datetime.timedelta(minutes=30)
+        timeout = datetime.timedelta(minutes=15)
+        vote_until = datetime.datetime.now() + timeout
 
         s = "Rozpoczęto głosowanie w sprawie dodania zasady: \n"
         s += rule.to_string(print_id=False)
-        s += "\nPotrzeba powyżej 50% głosów"
-        s += f' Głosowanie potrwa: `{timeout}`'
+        s += "\nPotrzeba powyżej 50% głosów."
+        s += f' Głosowanie potrwa do `{vote_until.hour}:{vote_until.minute}`'
 
         poll = await default_channel.send(s)
         await poll.add_reaction("👍")
@@ -333,12 +343,10 @@ class Rules(commands.Cog):
                 result -= reaction.count
 
         if result > 0:
+            rule.save()
             await poll.reply(f'Głosowanie w sprawie zasady nr '
                              f'**{rule.id}** przeszło większością głosów')
-            rule.save()
             logger.info(f'{ctx.author} utworzył zasadę:'
                         f' {rule.to_string()}')
         else:
-            await poll.reply(f'Głosowanie w sprawie zasady nr '
-                             f'**{rule.id}** nie uzyskało'
-                             f' większości głosów')
+            await poll.reply("Głosowanie nie uzyskało większości głosów")
