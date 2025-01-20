@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import random
 import traceback
 from datetime import timedelta
@@ -150,7 +151,13 @@ class Action:
                     s += f' na kanale {self.target[0]}'
                 s += "."
                 if self.value:
-                    s += f' Jeśli głosowanie przejdzie, wykonaj akcję nr {self.value[0]}.'
+                    s += " Jeśli głosowanie przejdzie, wykonaj akcję: "
+                    action_to_execute = get_by_id(int(self.value[0]))
+                    if action_to_execute:
+                        s += action_to_execute.to_string()
+                    else:
+                        s += "Błędna akcja"
+                    s += "."
                 if len(self.value) > 1:
                     s += f' Głosowanie będzie trwało {self.value[1]} sekund.'
             case ActionType.RANDOM:
@@ -160,7 +167,12 @@ class Action:
             case ActionType.CHAIN:
                 s += "Wykonaj po kolei akcje: "
                 for value in self.value:
-                    s += f'{value}, '
+                    action_to_execute = get_by_id(int(value))
+                    if action_to_execute:
+                        s += action_to_execute.to_string()
+                    else:
+                        s += "Błędna akcja"
+                    s += ", "
 
         return s
     async def execute(
@@ -272,6 +284,8 @@ class Action:
                         if len(self.value) > 1:
                             timeout = timedelta(seconds=int(self.value[1]))
 
+                        vote_until = datetime.datetime.now() + timeout
+
                         s = "Rozpoczęto głosowanie przeciwko "
                         s += target.mention
                         s += ".\nPotrzeba powyżej 50% głosów"
@@ -279,7 +293,7 @@ class Action:
                             s += (f', żeby wykonać akcję: '
                                   f'{action_to_execute.to_string()}')
                         s += ".\n"
-                        s += f' Głosowanie potrwa: `{timeout}`'
+                        s += f' Głosowanie potrwa do `{vote_until.hour}:{vote_until.minute}`'
 
                         poll = await target_channel.send(s)
                         await poll.add_reaction("👍")
