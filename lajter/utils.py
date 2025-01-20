@@ -38,26 +38,26 @@ def rate_message(message: str) -> int:
     if message.startswith(("!", "http")):
         return 0
 
-    points = random.randrange(20)
+    points = random.randrange(10)
 
     words = message.split(" ")
 
     # Average Polish word is 6 around letters, if someone is spamming
     # one big string of text, they will start losing points
     if len(message) / len(words) > 15:
-        points -= 100
+        points -= 50
 
     # If someone is spamming very short words,
     # they are gonna get punished as well
     if len(words) > 3:
         if len(message) / len(words) < 4:
-            points -= 100
+            points -= 50
 
     # Checking for puncation
     for match in re.finditer("([.,?!] [a-zA-Z])+", message):
         points += 10
 
-    return min(points, 100)
+    return min(points, 50)
 
 async def get_default_guild(bot: commands.Bot) -> Guild | None:
     guild_id = os.getenv("DEFAULT_GUILD")
