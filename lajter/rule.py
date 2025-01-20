@@ -4,7 +4,7 @@ import logging
 from enum import Enum
 from typing import List
 
-from discord import Member, Spotify, Reaction, TextChannel, Message
+from discord import Member, Spotify, Reaction, TextChannel, Message, Emoji
 from discord.ext import commands
 from tinydb import TinyDB, where
 import lajter.action
@@ -163,7 +163,9 @@ class Rule:
                                 return True
             case RuleType.REACTION:
                 for regex in self.regexes:
-                    if reaction.emoji == regex:
+                    if type(reaction.emoji) == str and reaction.emoji == regex:
+                        return True
+                    if type(reaction.emoji) == Emoji and str(reaction.emoji.id) in regex:
                         return True
             case RuleType.NAME:
                 for regex in self.regexes:
