@@ -39,6 +39,11 @@ class Actions(commands.Cog):
             await ctx.reply(f'Musisz chwilę poczekać')
         elif isinstance(error, commands.BadArgument):
             await ctx.reply(f'Niepoprawny argument')
+        elif isinstance(error, commands.CheckFailure):
+            await ctx.reply("Nie masz uprawnień do tej komendy")
+        elif isinstance(error, commands.CommandNotFound):
+            await ctx.reply("Nie ma takiej komendy")
+
 
     @commands.command(
         name="addaction",
@@ -107,7 +112,7 @@ class Actions(commands.Cog):
         await ctx.reply(actions)
 
     @commands.command(name="publicactions", brief="Wyświetl publiczne akcje")
-    @commands.cooldown(1, 30)
+    @commands.cooldown(3, 30)
     async def read_public_actions(self, ctx: commands.Context):
         actions = ""
         for action_entry in Action.db.search(where('public') == True):
