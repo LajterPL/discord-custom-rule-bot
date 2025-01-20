@@ -1,9 +1,10 @@
 import logging
+import os.path
 import random
 from datetime import datetime
 
 import discord
-from discord import Member, Message, User
+from discord import Member, Message, User, Reaction
 from discord.ext import commands
 from tinydb import where
 
@@ -58,6 +59,42 @@ class Points(commands.Cog):
         user.last_activity = datetime.now()
         user.points += lajter.utils.rate_message(message.content)
         user.save()
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction: Reaction, user: User):
+        if reaction.message.author.id == user.id:
+            return
+
+        db_user = lajter.user.get_by_id(reaction.message.author.id)
+        if not db_user:
+            return
+
+        db_user.points += 10
+        db_user.save()
+
+        await handle_rules(
+            [
+                lajter.rule.RuleType.POINTS_LESS_THAN,
+                lajter.rule.RuleType.POINTS_GREATER_THAN
+            ],
+            bot=self.bot,
+            member=reaction.message.author,
+            db_user=db_user,
+            channel=reaction.message.channel,
+            message=reaction.message
+        )
+
+    async def cog_command_error(
+            self,
+            ctx: commands.Context,
+            error: commands.CommandError
+    ):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.reply(f'Musisz podać argument: {error.param.name}')
+        elif isinstance(error, commands.CommandOnCooldown):
+            await ctx.reply(f'Musisz chwilę poczekać')
+        elif isinstance(error, commands.BadArgument):
+            await ctx.reply(f'Niepoprawny argument')
 
     @commands.command(name="points", brief="Wyświetl posiadane punkty")
     @lajter.utils.not_banned()
@@ -128,6 +165,7 @@ class Points(commands.Cog):
 
     @commands.command(name="top", aliases=["leaderboard"], brief="Wyświetl tabelę punktów")
     @commands.guild_only()
+    @commands.cooldown(1, 30)
     async def point_leaderboard(self, ctx: commands.Context):
         async with ctx.typing():
             users = lajter.user.User.db.all()
@@ -185,3 +223,60 @@ class Points(commands.Cog):
                 channel=ctx.channel,
                 message=ctx.message
             )
+
+    @commands.command(name="word", brief="Powiedz słowo, żeby wygrać punkty")
+    @commands.guild_only()
+    @commands.cooldown(3, 10)
+    @lajter.utils.not_banned()
+    async def say_word(self, ctx: commands.Context):
+        default_channel = await lajter.utils.get_default_channel(self.bot)
+        if ctx.channel.id == default_channel.id:
+            await ctx.reply("Idź na spam kanał!!!")
+            return
+
+        word = ""
+        with open("slowa.txt", "rb") as f:
+            seek_range = os.path.getsize("slowa.txt")
+            while seek_range > 100:
+                seek_range = int(seek_range/2)
+                if bool(random.getrandbits(1)):
+                    f.seek(seek_range, 1)
+            bytes = f.read(100).split(b'\n')
+            words = []
+            for byte_word in bytes:
+                try:
+                    words.append(byte_word.decode())
+                except UnicodeDecodeError:
+                    pass
+            word = random.choice(words)
+            word = word.strip()
+
+        await ctx.reply(f'Powiedz: *{word}*')
+
+        def check(message: Message):
+            return (message.channel == ctx.channel and
+            (message.author == ctx.author or word in message.content.lower()))
+
+        reply = await self.bot.wait_for("message", check=check)
+
+        if word in reply.content.lower():
+            db_user = lajter.user.get_by_id(reply.author.id)
+            points = random.randrange(10, 30)
+
+            db_user.points += points
+            db_user.save()
+            await reply.reply(f'Otrzymujesz **{points}** punktów')
+
+            await handle_rules(
+                [
+                    lajter.rule.RuleType.POINTS_LESS_THAN,
+                    lajter.rule.RuleType.POINTS_GREATER_THAN
+                ],
+                bot=self.bot,
+                member=ctx.author,
+                db_user=db_user,
+                channel=ctx.channel,
+                message=reply
+            )
+        else:
+            await reply.reply("Zła odpowiedź")
